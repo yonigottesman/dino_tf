@@ -57,7 +57,7 @@ def train(config):
     )
     dino.compile(optimizer=optimizer, loss=loss, run_eagerly=False)
 
-    dino.fit(x=ds, epochs=config["epochs"], steps_per_epoch=1)
+    dino.fit(x=ds, epochs=config["epochs"])
 
 
 if __name__ == "__main__":
