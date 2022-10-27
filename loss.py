@@ -13,7 +13,7 @@ class DinoLoss:
         center_momentum=0.9,
     ):
         self.center = tf.Variable(
-            tf.ones(out_dim),
+            tf.zeros(out_dim),
         )
         self.student_temp = student_temp
         self.center_momentum = center_momentum

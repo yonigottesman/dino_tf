@@ -76,10 +76,14 @@ def multi_crop_forward(model, multi_crop_batched, training=False):
     The function will reshape to (batch*crops,w,h,c) and pass the large batch through the model.
     """
     shape = tf.shape(multi_crop_batched)
-    huge_batch = tf.reshape(multi_crop_batched, (shape[0] * shape[1], shape[2], shape[3], shape[4]))
+    # reshape multi_crop_batched so that first dimension is ordered batch_crop1,batch_crop2...
+    huge_batch = tf.reshape(
+        tf.transpose(multi_crop_batched, perm=(1, 0, 2, 3, 4)), (shape[0] * shape[1], shape[2], shape[3], shape[4])
+    )
+
     huge_output = model(huge_batch, training=training)
 
-    multi_crop_output = tf.reshape(huge_output, (shape[0], shape[1], tf.shape(huge_output)[1]))
+    multi_crop_output = tf.transpose(tf.reshape(tf.transpose(huge_output), (-1, shape[1], shape[0])))
     return multi_crop_output
 
 
