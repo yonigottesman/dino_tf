@@ -63,6 +63,4 @@ class DinoLoss:
                 tf.float32,
             )
         )
-
-        # ema update
         self.center.assign(self.center * self.center_momentum + batch_center * (1 - self.center_momentum))
