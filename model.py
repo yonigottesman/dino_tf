@@ -1,52 +1,17 @@
 import tensorflow as tf
 
-
-class StepTracker(tf.keras.callbacks.Callback):
-    def __init__(self):
-        super().__init__()
-        self.epoch = tf.Variable(0)
-        self.step = tf.Variable(0)
-
-    def on_epoch_begin(self, epoch, logs=None):
-        self.epoch.assign(epoch)
-
-    def on_batch_begin(self, step, logs=None):
-        self.step.assign(step)
-
-
-class WrappedLoss(tf.keras.losses.Loss):
-    def __init__(self, loss, step_tracker, **kwargs):
-        super().__init__(**kwargs)
-        self.loss = loss
-        self.step_tracker = step_tracker
-
-    def call(self, y_true, y_pred):
-        return self.loss(y_true, y_pred, self.step_tracker.epoch)
+import vit
 
 
 class Dino(tf.keras.Model):
     def __init__(
-        self, teacher: tf.keras.Model, student: tf.keras.Model, momentum_scheduler, freeze_last_layer, *args, **kwargs
+        self, teacher: tf.keras.Model, student: tf.keras.Model, momentum_scheduler, step_tracker, *args, **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.teacher = teacher
         self.student = student
-        self.step_tracker = StepTracker()
         self.momentum_scheduler = momentum_scheduler
-        self.freeze_last_layer = tf.convert_to_tensor(freeze_last_layer)
-
-    # wrap dino loss with WrappedLoss that tracks the epoch number. tf.keras.losses.Loss expect y_true, y_pred
-    # and dino loss also expects epoch number
-    def compile(self, **kwargs):
-        kwargs["loss"] = WrappedLoss(kwargs["loss"], self.step_tracker)
-        super().compile(**kwargs)
-
-    # add StepTracker to callbacks to track epoch number and batch for usage in the dino loss and train_step
-    def fit(self, **kwargs):
-        callbacks = kwargs.get("callbacks", [])
-        callbacks.append(self.step_tracker)
-        kwargs["callbacks"] = callbacks
-        super().fit(**kwargs)
+        step_tracker = step_tracker
 
     def _forward(self, data, training):
         teacher_output = multi_crop_forward(self.teacher, multi_crop_batched=data["global_crops"], training=training)
@@ -104,25 +69,25 @@ def dino_head(in_dim, out_dim, use_bn=False, nlayers=3, hidden_dim=2048, bottlen
     return head
 
 
-def backbone(config):
-    return tf.keras.applications.resnet50.ResNet50(include_top=False, weights=None, pooling="avg")
+def build_model(config):
+    if config["arch"] == "resnet50":
+        backbone = tf.keras.applications.resnet50.ResNet50(include_top=False, weights=None, pooling="avg")
+    else:
+        backbone = vit.__dict__[config["arch"]](
+            patch_size=config["patch_size"], sd_survival_probability=1 - config["drop_path_rate"]
+        )
+    return tf.keras.Sequential([backbone, dino_head(in_dim=backbone.output_shape[-1], out_dim=config["out_dim"])])
 
 
-def build_dino(config, steps_per_epoch):
-    teacher_backbone = backbone(config)
-    teacher_backbone.trainable = False
+def build_dino(config, steps_per_epoch, step_tracker):
+    teacher = build_model(config)
+    teacher.trainable = False
 
-    teacher = tf.keras.Sequential(
-        [teacher_backbone, dino_head(in_dim=teacher_backbone.output_shape[-1], out_dim=config["out_dim"])]
-    )
+    student = build_model(config)
 
-    student_backbone = backbone(config)
-    student = tf.keras.Sequential(
-        [student_backbone, dino_head(in_dim=student_backbone.output_shape[-1], out_dim=config["out_dim"])]
-    )
     momentum_scheduler = tf.keras.optimizers.schedules.CosineDecay(
         config["momentum_teacher"], steps_per_epoch * config["epochs"], 1 / config["momentum_teacher"]
     )
 
-    dino = Dino(teacher, student, momentum_scheduler, freeze_last_layer=config["freeze_last_layer"])
+    dino = Dino(teacher, student, momentum_scheduler, step_tracker)
     return dino

@@ -5,31 +5,14 @@ from tensorflow_addons.optimizers import AdamW
 from data import dataset
 from loss import DinoLoss
 from model import build_dino
-
-
-class WarmupCosineDecay(tf.keras.optimizers.schedules.LearningRateSchedule):
-    def __init__(self, base_learning_rate, steps, warmup_steps, alpha=0, name=None):
-        super().__init__()
-        self.base_learning_rate = tf.convert_to_tensor(base_learning_rate, dtype=tf.float32)
-        self.cosine_decay = tf.keras.optimizers.schedules.CosineDecay(base_learning_rate, steps - warmup_steps, alpha)
-        self.warmup_steps = tf.convert_to_tensor(warmup_steps, dtype=tf.float32)
-        self.name = name
-
-    def __call__(self, step):
-        with tf.name_scope(self.name or "WarmupCosineDecay") as name:
-            step = tf.cast(step, tf.float32)
-            learning_rate = tf.cond(
-                step < self.warmup_steps,
-                lambda: tf.math.divide_no_nan(step, self.warmup_steps) * self.base_learning_rate,
-                lambda: self.cosine_decay(step - self.warmup_steps),
-                name=name,
-            )
-            return learning_rate
+from utils import StepTracker, WarmupCosineDecay, WrappedLoss
 
 
 def train(config):
     ds = dataset(config)
-    dino = build_dino(config, len(ds))
+    step_tracker = StepTracker()
+    dino = build_dino(config, len(ds), step_tracker)
+
     loss = DinoLoss(
         out_dim=config["out_dim"],
         warmup_teacher_temp=config["warmup_teacher_temp"],
@@ -37,6 +20,7 @@ def train(config):
         warmup_teacher_temp_epochs=config["warmup_teacher_temp_epochs"],
         nepochs=config["epochs"],
     )
+    loss = WrappedLoss(loss, step_tracker)
 
     optimizer = AdamW(
         weight_decay=WarmupCosineDecay(
@@ -57,7 +41,7 @@ def train(config):
     )
     dino.compile(optimizer=optimizer, loss=loss, run_eagerly=False)
 
-    dino.fit(x=ds, epochs=config["epochs"])
+    dino.fit(x=ds, epochs=config["epochs"], callbacks=step_tracker)
 
 
 if __name__ == "__main__":

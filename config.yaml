@@ -1,9 +1,12 @@
 # default parameters taken from https://github.com/facebookresearch/dino/blob/main/main_dino.py#L42
 
 # Model parameters
+arch: vit_small 
+patch_size: 16
+
 out_dim: 65536
 momentum_teacher: 0.996
-
+use_bn_in_head: False
 # Temperature teacher parameters
 warmup_teacher_temp: 0.04
 teacher_temp: 0.04
@@ -22,6 +25,7 @@ batch_size_per_gpu: 64
 local_crops_number: 8
 clip_grad: 3.0
 freeze_last_layer: 1
+drop_path_rate: 0.1
 
 # Multi-crop parameters
 global_crops_scale: [0.4, 1.]
