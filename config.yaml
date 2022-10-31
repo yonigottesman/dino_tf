@@ -3,10 +3,11 @@
 # Model parameters
 arch: vit_small 
 patch_size: 16
-
 out_dim: 65536
 momentum_teacher: 0.996
 use_bn_in_head: False
+img_size: 224
+
 # Temperature teacher parameters
 warmup_teacher_temp: 0.04
 teacher_temp: 0.04

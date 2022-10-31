@@ -52,21 +52,21 @@ def multi_crop_forward(model, multi_crop_batched, training=False):
     return multi_crop_output
 
 
-def dino_head(in_dim, out_dim, use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256):
-    inputs = tf.keras.layers.Input(shape=(in_dim,))
-    x = inputs
-    for _ in range(nlayers - 1):
-        x = tf.keras.layers.Dense(hidden_dim)(x)
-        if use_bn:
-            x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Activation("gelu")(x)
-    x = tf.keras.layers.Dense(bottleneck_dim)(x)
+def dino_head(out_dim, use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256):
+    def head_inner(x):
+        for _ in range(nlayers - 1):
+            x = tf.keras.layers.Dense(hidden_dim)(x)
+            if use_bn:
+                x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.Activation("gelu")(x)
+        x = tf.keras.layers.Dense(bottleneck_dim)(x)
 
-    x = tf.math.l2_normalize(x, axis=-1)
-    x = tf.keras.layers.Dense(out_dim, use_bias=False, name="last_layer")(x)
-    # TODO YONIGO: did not use WeightNormalization and _no_grad_trunc_normal_
-    head = tf.keras.Model(inputs=inputs, outputs=x)
-    return head
+        x = tf.math.l2_normalize(x, axis=-1)
+        x = tf.keras.layers.Dense(out_dim, use_bias=False, name="last_layer")(x)
+        # TODO YONIGO: did not use WeightNormalization and _no_grad_trunc_normal_
+        return x
+
+    return head_inner
 
 
 def build_model(config):
@@ -76,7 +76,10 @@ def build_model(config):
         backbone = vit.__dict__[config["arch"]](
             patch_size=config["patch_size"], sd_survival_probability=1 - config["drop_path_rate"]
         )
-    return tf.keras.Sequential([backbone, dino_head(in_dim=backbone.output_shape[-1], out_dim=config["out_dim"])])
+    inputs = tf.keras.Input((config["img_size"], config["img_size"], 3))
+    x = backbone(inputs)
+    x = dino_head(out_dim=config["out_dim"])(x)
+    return tf.keras.Model(inputs=inputs, outputs=x)
 
 
 def build_dino(config, steps_per_epoch, step_tracker):
