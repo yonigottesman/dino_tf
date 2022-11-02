@@ -52,21 +52,45 @@ def multi_crop_forward(model, multi_crop_batched, training=False):
     return multi_crop_output
 
 
-def dino_head(out_dim, use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256):
-    def head_inner(x):
-        for _ in range(nlayers - 1):
-            x = tf.keras.layers.Dense(hidden_dim)(x)
-            if use_bn:
+class DinoHead(tf.keras.Model):
+    def __init__(self, out_dim, use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.out_dim = out_dim
+        self.use_bn = use_bn
+        self.nlayers = nlayers
+        self.hidden_dim = hidden_dim
+        self.bottleneck_dim = bottleneck_dim
+
+    def build(self, input_shape):
+        in_dim = input_shape[-1]
+        inputs = tf.keras.layers.Input(shape=(in_dim,))
+        x = inputs
+        for _ in range(self.nlayers - 1):
+            x = tf.keras.layers.Dense(self.hidden_dim)(x)
+            if self.use_bn:
                 x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.Activation("gelu")(x)
-        x = tf.keras.layers.Dense(bottleneck_dim)(x)
+        x = tf.keras.layers.Dense(self.bottleneck_dim)(x)
 
         x = tf.math.l2_normalize(x, axis=-1)
-        x = tf.keras.layers.Dense(out_dim, use_bias=False, name="last_layer")(x)
+        x = tf.keras.layers.Dense(self.out_dim, use_bias=False, name="last_layer")(x)
         # TODO YONIGO: did not use WeightNormalization and _no_grad_trunc_normal_
-        return x
+        self.head = tf.keras.Model(inputs=inputs, outputs=x)
 
-    return head_inner
+    def call(self, inputs, training=None, mask=None):
+        return self.head(inputs, training)
+
+
+class HeadedBackbone(tf.keras.Model):
+    def __init__(self, backbone, head, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.backbone = backbone
+        self.head = head
+
+    def call(self, inputs, training=None):
+        x = self.backbone(inputs, training=training)
+        x = self.head(x, training=training)
+        return x
 
 
 def build_model(config):
@@ -74,12 +98,12 @@ def build_model(config):
         backbone = tf.keras.applications.resnet50.ResNet50(include_top=False, weights=None, pooling="avg")
     else:
         backbone = vit.__dict__[config["arch"]](
-            patch_size=config["patch_size"], sd_survival_probability=1 - config["drop_path_rate"]
+            img_size=config["img_size"],
+            patch_size=config["patch_size"],
+            sd_survival_probability=1 - config["drop_path_rate"],
         )
-    inputs = tf.keras.Input((config["img_size"], config["img_size"], 3))
-    x = backbone(inputs)
-    x = dino_head(out_dim=config["out_dim"])(x)
-    return tf.keras.Model(inputs=inputs, outputs=x)
+    head = DinoHead(out_dim=config["out_dim"])
+    return HeadedBackbone(backbone, head)
 
 
 def build_dino(config, steps_per_epoch, step_tracker):

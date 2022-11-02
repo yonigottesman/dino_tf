@@ -1,7 +1,7 @@
 # default parameters taken from https://github.com/facebookresearch/dino/blob/main/main_dino.py#L42
 
 # Model parameters
-arch: vit_small 
+arch: vit_tiny
 patch_size: 16
 out_dim: 65536
 momentum_teacher: 0.996
