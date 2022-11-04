@@ -35,7 +35,7 @@ class ViTEmbeddings(tf.keras.layers.Layer):
 
         self.patch_embeddings = PatchEmbeddings(patch_size, hidden_size, name="patch_embeddings")
         self.dropout = tf.keras.layers.Dropout(rate=dropout)
-        num_patches = (img_size // self.patch_size) * (img_size // self.patch_size)
+        self.static_num_patches = (img_size // self.patch_size) * (img_size // self.patch_size)
 
         self.cls_token = self.add_weight(
             shape=(1, 1, self.hidden_size),
@@ -43,7 +43,7 @@ class ViTEmbeddings(tf.keras.layers.Layer):
             name="cls_token",
         )
         self.position_embeddings = self.add_weight(
-            shape=(1, num_patches + 1, self.hidden_size),
+            shape=(1, self.static_num_patches + 1, self.hidden_size),
             trainable=True,
             name="position_embeddings",
         )
@@ -51,12 +51,11 @@ class ViTEmbeddings(tf.keras.layers.Layer):
     def interpolate_pos_encoding(self, embeddings, height, width) -> tf.Tensor:
         embeddings_shape = tf.shape(embeddings)  # N, seq_len, dim
 
-        num_patches = embeddings_shape[1] - 1  # without CLS
+        current_num_patches = embeddings_shape[1] - 1  # without CLS
 
-        num_positions = tf.shape(self.position_embeddings)[1]
-        num_positions -= 1  # without CLS
-
-        if num_patches == num_positions and height == width:  # TODO YONIGO: constraint that original size is square
+        if (
+            current_num_patches == self.static_num_patches and height == width
+        ):  # TODO YONIGO: constraint that original size is square
             return self.position_embeddings
         class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
@@ -65,14 +64,19 @@ class ViTEmbeddings(tf.keras.layers.Layer):
         patch_pos_embed = tf.image.resize(
             images=tf.reshape(
                 patch_pos_embed,
-                shape=(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), embeddings_shape[2]),
+                shape=(
+                    1,
+                    int(math.sqrt(self.static_num_patches)),
+                    int(math.sqrt(self.static_num_patches)),
+                    embeddings_shape[2],
+                ),
             ),
             size=(h0, w0),
             method="bicubic",
         )
 
-        shape = tf.shape(patch_pos_embed)
-        assert h0 == shape[-3] and w0 == shape[-2]
+        # shape = tf.shape(patch_pos_embed)
+        # assert h0 == shape[-3] and w0 == shape[-2]
         patch_pos_embed = tf.reshape(tensor=patch_pos_embed, shape=(1, -1, embeddings_shape[2]))
         return tf.concat(values=(class_pos_embed, patch_pos_embed), axis=1)
 

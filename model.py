@@ -11,7 +11,7 @@ class Dino(tf.keras.Model):
         self.teacher = teacher
         self.student = student
         self.momentum_scheduler = momentum_scheduler
-        step_tracker = step_tracker
+        self.step_tracker = step_tracker
 
     def _forward(self, data, training):
         teacher_output = multi_crop_forward(self.teacher, multi_crop_batched=data["global_crops"], training=training)

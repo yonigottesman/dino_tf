@@ -2,11 +2,12 @@
 
 # Model parameters
 arch: vit_tiny
-patch_size: 16
+patch_size: 8
 out_dim: 65536
 momentum_teacher: 0.996
 use_bn_in_head: False
-img_size: 224
+img_size: 96
+local_img_size: 32
 
 # Temperature teacher parameters
 warmup_teacher_temp: 0.04
@@ -15,7 +16,7 @@ warmup_teacher_temp_epochs: 30
 
 
 # Training/Optimization parameters
-epochs: 100
+epochs: 300
 min_lr: 0.000001
 warmup_epochs: 10
 lr: 0.0005
@@ -30,8 +31,7 @@ drop_path_rate: 0.1
 
 # Multi-crop parameters
 global_crops_scale: [0.4, 1.]
-local_crops_number: 8
+local_crops_number: 4
 local_crops_scale: [0.05, 0.4]
 
-
-
+shuffle_buffer: 20000

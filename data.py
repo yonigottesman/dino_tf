@@ -22,7 +22,9 @@ def get_augmentations(config):
     global_crop_1 = preprocessing.Augmenter(
         [
             preprocessing.RandomCropAndResize(
-                (224, 224), crop_area_factor=config["global_crops_scale"], aspect_ratio_factor=((3 / 4, 4 / 3))
+                (config["img_size"], config["img_size"]),
+                crop_area_factor=config["global_crops_scale"],
+                aspect_ratio_factor=((3 / 4, 4 / 3)),
             ),
             flip_and_jitter,
             preprocessing.RandomGaussianBlur(kernel_size=1, factor=(0.5, 0.5)),  # not like paper
@@ -33,7 +35,9 @@ def get_augmentations(config):
     global_crop_2 = preprocessing.Augmenter(
         [
             preprocessing.RandomCropAndResize(
-                (224, 224), crop_area_factor=config["global_crops_scale"], aspect_ratio_factor=((3 / 4, 4 / 3))
+                (config["img_size"], config["img_size"]),
+                crop_area_factor=config["global_crops_scale"],
+                aspect_ratio_factor=((3 / 4, 4 / 3)),
             ),
             flip_and_jitter,
             preprocessing.MaybeApply(
@@ -47,7 +51,9 @@ def get_augmentations(config):
     local_crop = preprocessing.Augmenter(
         [
             preprocessing.RandomCropAndResize(
-                (96, 96), crop_area_factor=(0.05, 0.4), aspect_ratio_factor=((3 / 4, 4 / 3))
+                (config["local_img_size"], config["local_img_size"]),
+                crop_area_factor=config["local_crops_scale"],
+                aspect_ratio_factor=((3 / 4, 4 / 3)),
             ),
             flip_and_jitter,
             preprocessing.MaybeApply(preprocessing.RandomGaussianBlur(kernel_size=1, factor=(0.5, 0.5)), 0.5),
@@ -61,7 +67,8 @@ def get_augmentations(config):
 def dataset(config):
     global_crop_1, global_crop_2, local_crop = get_augmentations(config)
 
-    ds = tfds.load("imagenette", as_supervised=True)["train"]
+    ds = tfds.load("stl10", as_supervised=True, shuffle_files=True)["train"]
+    ds = ds.shuffle(config["shuffle_buffer"])
     ds = ds.map(lambda x, _: x)
     ds = ds.map(
         lambda image: {
